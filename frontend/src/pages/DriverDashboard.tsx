@@ -8,31 +8,34 @@ const DriverDashboard = ({ user, setUser }: { user: any; setUser: (user: any) =>
   const [activeTrip, setActiveTrip] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchActiveTrip();
-
-    socket.on('ride_assigned', (trip) => {
-      console.log('Ride assigned to driver:', trip);
-      setActiveTrip(trip);
-    });
-
-    return () => { socket.off('ride_assigned'); };
-  }, []);
-
-  const fetchActiveTrip = async () => {
+  const fetchDriverStatus = async () => {
     try {
-      const { data } = await api.get('/drivers/me/trip');
-      setActiveTrip(data);
+      const { data } = await api.get('/drivers/me');
+      setIsAvailable(data.isAvailable);
+      setLocation(data.location);
+      setActiveTrip(data.activeTrip);
     } catch (err) {
-      setActiveTrip(null);
+      console.error('Failed to fetch driver status', err);
     }
   };
+
+  useEffect(() => {
+    void fetchDriverStatus();
+    const interval = window.setInterval(() => void fetchDriverStatus(), 5000);
+    const handleRideAssigned = () => void fetchDriverStatus();
+    socket.on('ride_assigned', handleRideAssigned);
+
+    return () => {
+      window.clearInterval(interval);
+      socket.off('ride_assigned', handleRideAssigned);
+    };
+  }, []);
 
   const toggleAvailability = async () => {
     setLoading(true);
     try {
       await api.patch('/drivers/availability', { available: !isAvailable });
-      setIsAvailable(!isAvailable);
+      await fetchDriverStatus();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Update failed');
     } finally {
@@ -51,11 +54,8 @@ const DriverDashboard = ({ user, setUser }: { user: any; setUser: (user: any) =>
   const handleTripAction = async (action: 'start' | 'complete') => {
     if (!activeTrip) return;
     try {
-      const { data } = await api.post(`/trips/${activeTrip.id}/${action}`, {});
-      setActiveTrip(data);
-      if (action === 'complete') {
-        setIsAvailable(true);
-      }
+      await api.post(`/trips/${activeTrip.id}/${action}`, {});
+      await fetchDriverStatus();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Action failed');
     }

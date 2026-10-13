@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { RideRequestStatus, TripStatus } from '../generated/prisma/client.js';
 import type { AuthRequest } from '../auth.js';
 import { prisma } from '../lib/prisma.js';
+import { dispatchNextMatchingRide } from '../services/rideMatchingService.js';
 
 const BASE_FARE = 5.00;
 const PER_KM_RATE = 2.00;
@@ -106,7 +107,15 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
 export const getRides = async (req: AuthRequest, res: Response) => {
   const rides = await prisma.rideRequest.findMany({
     where: { passengerId: req.user!.userId },
-    include: { trip: true }
+    include: {
+      trip: {
+        include: {
+          driverProfile: {
+            include: { user: true },
+          },
+        },
+      },
+    },
   });
   res.json(rides);
 };
@@ -137,7 +146,6 @@ export const cancelRide = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Ride not found' });
     }
 
-    const status = ride.status;
     await prisma.$transaction([
       prisma.rideRequest.update({
         where: { id },
@@ -157,6 +165,7 @@ export const cancelRide = async (req: AuthRequest, res: Response) => {
         where: { id: trip.driverProfileId },
         data: { isAvailable: true }
       });
+      await dispatchNextMatchingRide(trip.driverProfileId);
     }
 
     res.json({ message: 'Ride cancelled' });

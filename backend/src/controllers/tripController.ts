@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { TripStatus } from '../generated/prisma/client.js';
 import type { AuthRequest } from '../auth.js';
 import { prisma } from '../lib/prisma.js';
+import { dispatchNextMatchingRide } from '../services/rideMatchingService.js';
 
 export const startTrip = async (req: AuthRequest, res: Response) => {
   try {
@@ -11,11 +12,6 @@ export const startTrip = async (req: AuthRequest, res: Response) => {
     }
 
     const trip = await prisma.trip.findUnique({ where: { id } });
-
-    if (!trip || trip.driverProfileId !== req.user!.userId) { // Note: req.user.userId is User ID, trip.driverProfileId is DriverProfile ID. This needs fixing.
-       // Fixing logic below: we need to check if the user owns the driver profile
-    }
-
     const driverProfile = await prisma.driverProfile.findUnique({
       where: { userId: req.user!.userId }
     });
@@ -75,6 +71,7 @@ export const completeTrip = async (req: AuthRequest, res: Response) => {
         data: { isAvailable: true }
       })
     ]);
+    await dispatchNextMatchingRide(driverProfile.id);
 
     res.json(updatedTrip);
   } catch (err: any) {

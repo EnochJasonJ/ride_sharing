@@ -9,14 +9,15 @@ const PassengerDashboard = ({ user, setUser }: { user: any; setUser: (user: any)
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchRides();
-    
-    socket.on('ride_update', (update) => {
-      console.log('Ride update received:', update);
-      fetchRides();
-    });
+    void fetchRides();
+    const interval = window.setInterval(() => void fetchRides(), 5000);
+    const handleRideUpdate = () => void fetchRides();
+    socket.on('ride_update', handleRideUpdate);
 
-    return () => { socket.off('ride_update'); };
+    return () => {
+      window.clearInterval(interval);
+      socket.off('ride_update', handleRideUpdate);
+    };
   }, []);
 
   const fetchRides = async () => {
@@ -24,7 +25,7 @@ const PassengerDashboard = ({ user, setUser }: { user: any; setUser: (user: any)
       const { data } = await api.get('/rides');
       setRides(data);
     } catch (err) {
-      console.error('Failed to fetch rides');
+      console.error('Failed to fetch rides', err);
     }
   };
 
